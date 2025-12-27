@@ -47,7 +47,7 @@
 #include "BacktracePrivate.h"
 
 #ifndef lengthof
-#define lengthof(x)     (sizeof(x) / sizeof(x[0]))
+#define lengthof(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
 using namespace swift::runtime::backtrace;
@@ -62,15 +62,8 @@ CrashInfo crashInfo;
 
 os_unfair_lock crashLock = OS_UNFAIR_LOCK_INIT;
 
-const int signalsToHandle[] = {
-  SIGQUIT,
-  SIGABRT,
-  SIGBUS,
-  SIGFPE,
-  SIGILL,
-  SIGSEGV,
-  SIGTRAP
-};
+const int signalsToHandle[] = {SIGQUIT, SIGABRT, SIGBUS, SIGFPE,
+                               SIGILL,  SIGSEGV, SIGTRAP};
 
 } // namespace
 
@@ -78,9 +71,7 @@ namespace swift {
 namespace runtime {
 namespace backtrace {
 
-SWIFT_RUNTIME_STDLIB_INTERNAL int
-_swift_installCrashHandler()
-{
+SWIFT_RUNTIME_STDLIB_INTERNAL int _swift_installCrashHandler() {
   stack_t ss;
 
   // See if an alternate signal stack already exists
@@ -135,9 +126,7 @@ _swift_installCrashHandler()
 
 namespace {
 
-void
-suspend_other_threads()
-{
+void suspend_other_threads() {
   os_unfair_lock_lock(&crashLock);
 
   thread_t self = mach_thread_self();
@@ -146,8 +135,11 @@ suspend_other_threads()
 
   kern_return_t kr = task_threads(mach_task_self(), &threads, &count);
 
-  if (kr != KERN_SUCCESS)
+  if (kr != KERN_SUCCESS) {
+    mach_port_deallocate(mach_task_self(), self);
+    os_unfair_lock_unlock(&crashLock);
     return;
+  }
 
   for (unsigned n = 0; n < count; ++n) {
     if (threads[n] == self)
@@ -158,16 +150,14 @@ suspend_other_threads()
     (void)mach_port_deallocate(mach_task_self(), threads[n]);
   }
 
-  vm_deallocate(mach_task_self(),
-                (vm_address_t)threads,
+  vm_deallocate(mach_task_self(), (vm_address_t)threads,
                 count * sizeof(threads[0]));
 
+  mach_port_deallocate(mach_task_self(), self);
   os_unfair_lock_unlock(&crashLock);
 }
 
-void
-resume_other_threads()
-{
+void resume_other_threads() {
   os_unfair_lock_lock(&crashLock);
 
   thread_t self = mach_thread_self();
@@ -176,8 +166,11 @@ resume_other_threads()
 
   kern_return_t kr = task_threads(mach_task_self(), &threads, &count);
 
-  if (kr != KERN_SUCCESS)
+  if (kr != KERN_SUCCESS) {
+    mach_port_deallocate(mach_task_self(), self);
+    os_unfair_lock_unlock(&crashLock);
     return;
+  }
 
   for (unsigned n = 0; n < count; ++n) {
     if (threads[n] == self)
@@ -188,18 +181,14 @@ resume_other_threads()
     (void)mach_port_deallocate(mach_task_self(), threads[n]);
   }
 
-  vm_deallocate(mach_task_self(),
-                (vm_address_t)threads,
+  vm_deallocate(mach_task_self(), (vm_address_t)threads,
                 count * sizeof(threads[0]));
 
+  mach_port_deallocate(mach_task_self(), self);
   os_unfair_lock_unlock(&crashLock);
 }
 
-void
-handle_fatal_signal(int signum,
-                    siginfo_t *pinfo,
-                    void *uctx)
-{
+void handle_fatal_signal(int signum, siginfo_t *pinfo, void *uctx) {
   int old_err = errno;
 
   // Prevent this from exploding if more than one thread gets here at once
@@ -213,12 +202,13 @@ handle_fatal_signal(int signum,
   thread_identifier_info_data_t ident_info;
   mach_msg_type_number_t ident_size = THREAD_IDENTIFIER_INFO_COUNT;
 
-  int ret = thread_info(mach_thread_self(),
-                        THREAD_IDENTIFIER_INFO,
-                        (int *)&ident_info,
-                        &ident_size);
-  if (ret != KERN_SUCCESS)
+  int ret = thread_info(mach_thread_self(), THREAD_IDENTIFIER_INFO,
+                        (int *)&ident_info, &ident_size);
+  if (ret != KERN_SUCCESS) {
+    resume_other_threads();
+    errno = old_err;
     return;
+  }
 
   // Fill in crash info
   crashInfo.crashing_thread = ident_info.thread_id;
@@ -256,7 +246,8 @@ handle_fatal_signal(int signum,
      to try to suspend other threads from here. */
   if (!_swift_spawnBacktracer(&crashInfo)) {
     const char *message = _swift_backtraceSettings.color == OnOffTty::On
-      ? " failed\n\n" : " failed ***\n\n";
+                              ? " failed\n\n"
+                              : " failed ***\n\n";
     if (_swift_backtraceSettings.outputTo == OutputTo::Stderr)
       write(STDERR_FILENO, message, strlen(message));
     else
