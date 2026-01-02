@@ -202,8 +202,8 @@ void handle_fatal_signal(int signum, siginfo_t *pinfo, void *uctx) {
   thread_identifier_info_data_t ident_info;
   mach_msg_type_number_t ident_size = THREAD_IDENTIFIER_INFO_COUNT;
 
-  int ret = thread_info(mach_thread_self(), THREAD_IDENTIFIER_INFO,
-                        (int *)&ident_info, &ident_size);
+  kern_return_t ret = thread_info(mach_thread_self(), THREAD_IDENTIFIER_INFO,
+                                  (int *)&ident_info, &ident_size);
   if (ret != KERN_SUCCESS) {
     resume_other_threads();
     errno = old_err;

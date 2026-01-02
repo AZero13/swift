@@ -68,7 +68,7 @@
 #define MEMSERVER_USE_PROCESS 0
 
 #ifndef lengthof
-#define lengthof(x)     (sizeof(x) / sizeof(x[0]))
+#define lengthof(x) (sizeof(x) / sizeof(x[0]))
 #endif
 
 using namespace swift::runtime::backtrace;
@@ -83,8 +83,8 @@ void release_thread_lock();
 void notify_paused();
 uint32_t currently_paused();
 void wait_paused(uint32_t expected, const struct timespec *timeout);
-int  memserver_start();
-int  memserver_entry(void *);
+int memserver_start();
+int memserver_entry(void *);
 
 ssize_t safe_read(int fd, void *buf, size_t len) {
   uint8_t *ptr = (uint8_t *)buf;
@@ -94,7 +94,7 @@ ssize_t safe_read(int fd, void *buf, size_t len) {
   while (ptr < end) {
     ssize_t ret;
     do {
-      ret = read(fd, buf, len);
+      ret = read(fd, ptr, len);
     } while (ret <= 0 && errno == EINTR);
     if (ret <= 0)
       return ret;
@@ -114,7 +114,7 @@ ssize_t safe_write(int fd, const void *buf, size_t len) {
   while (ptr < end) {
     ssize_t ret;
     do {
-      ret = write(fd, buf, len);
+      ret = write(fd, ptr, len);
     } while (ret <= 0 && errno == EINTR);
     if (ret <= 0)
       return ret;
@@ -128,15 +128,8 @@ ssize_t safe_write(int fd, const void *buf, size_t len) {
 
 CrashInfo crashInfo;
 
-const int signalsToHandle[] = {
-  SIGQUIT,
-  SIGABRT,
-  SIGBUS,
-  SIGFPE,
-  SIGILL,
-  SIGSEGV,
-  SIGTRAP
-};
+const int signalsToHandle[] = {SIGQUIT, SIGABRT, SIGBUS, SIGFPE,
+                               SIGILL,  SIGSEGV, SIGTRAP};
 
 } // namespace
 
@@ -144,9 +137,7 @@ namespace swift {
 namespace runtime {
 namespace backtrace {
 
-SWIFT_RUNTIME_STDLIB_INTERNAL int
-_swift_installCrashHandler()
-{
+SWIFT_RUNTIME_STDLIB_INTERNAL int _swift_installCrashHandler() {
   stack_t ss;
 
   // See if an alternate signal stack already exists
@@ -203,20 +194,13 @@ _swift_installCrashHandler()
 namespace {
 
 // Older glibc and musl don't have these two syscalls
-pid_t
-gettid()
-{
-  return (pid_t)syscall(SYS_gettid);
-}
+pid_t gettid() { return (pid_t)syscall(SYS_gettid); }
 
-int
-tgkill(int tgid, int tid, int sig) {
+int tgkill(int tgid, int tid, int sig) {
   return syscall(SYS_tgkill, tgid, tid, sig);
 }
 
-void
-reset_signal(int signum)
-{
+void reset_signal(int signum) {
   struct sigaction sa;
   sa.sa_handler = SIG_DFL;
   sa.sa_flags = 0;
@@ -225,13 +209,9 @@ reset_signal(int signum)
   sigaction(signum, &sa, NULL);
 }
 
-void
-handle_fatal_signal(int signum,
-                    siginfo_t *pinfo,
-                    void *uctx)
-{
+void handle_fatal_signal(int signum, siginfo_t *pinfo, void *uctx) {
   int old_err = errno;
-  struct thread self = { 0, (int64_t)gettid(), (uint64_t)uctx };
+  struct thread self = {0, (int64_t)gettid(), (uint64_t)uctx};
 
   // Prevent this from exploding if more than one thread gets here at once
   suspend_other_threads(&self);
@@ -271,7 +251,8 @@ handle_fatal_signal(int signum,
   // Actually start the backtracer
   if (!_swift_spawnBacktracer(&crashInfo, fd)) {
     const char *message = _swift_backtraceSettings.color == OnOffTty::On
-      ? " failed\n\n" : " failed ***\n\n";
+                              ? " failed\n\n"
+                              : " failed ***\n\n";
     if (_swift_backtraceSettings.outputTo == OutputTo::Stdout)
       write(STDOUT_FILENO, message, strlen(message));
     else
@@ -294,24 +275,20 @@ handle_fatal_signal(int signum,
 
 // .. Thread handling ..........................................................
 
-void
-reset_threads(struct thread *first) {
+void reset_threads(struct thread *first) {
   __atomic_store_n(&crashInfo.thread_list, (uint64_t)first, __ATOMIC_RELEASE);
 }
 
-void
-add_thread(struct thread *thread) {
+void add_thread(struct thread *thread) {
   uint64_t next = __atomic_load_n(&crashInfo.thread_list, __ATOMIC_ACQUIRE);
   do {
     thread->next = next;
   } while (!__atomic_compare_exchange_n(&crashInfo.thread_list, &next,
-                                        (uint64_t)thread,
-                                        false,
+                                        (uint64_t)thread, false,
                                         __ATOMIC_RELEASE, __ATOMIC_ACQUIRE));
 }
 
-bool
-seen_thread(pid_t tid) {
+bool seen_thread(pid_t tid) {
   uint64_t next = __atomic_load_n(&crashInfo.thread_list, __ATOMIC_ACQUIRE);
   while (next) {
     struct thread *pthread = (struct thread *)next;
@@ -322,13 +299,10 @@ seen_thread(pid_t tid) {
   return false;
 }
 
-void
-pause_thread(int signum __attribute__((unused)),
-             siginfo_t *pinfo  __attribute__((unused)),
-             void *uctx)
-{
+void pause_thread(int signum __attribute__((unused)),
+                  siginfo_t *pinfo __attribute__((unused)), void *uctx) {
   int old_err = errno;
-  struct thread self = { 0, (int64_t)gettid(), (uint64_t)uctx };
+  struct thread self = {0, (int64_t)gettid(), (uint64_t)uctx};
 
   add_thread(&self);
 
@@ -341,16 +315,14 @@ pause_thread(int signum __attribute__((unused)),
 }
 
 struct linux_dirent64 {
-  ino64_t        d_ino;
-  off64_t        d_off;
+  ino64_t d_ino;
+  off64_t d_off;
   unsigned short d_reclen;
-  unsigned char  d_type;
-  char           d_name[256];
+  unsigned char d_type;
+  char d_name[256];
 };
 
-int
-getdents(int fd, void *buf, size_t bufsiz)
-{
+int getdents(int fd, void *buf, size_t bufsiz) {
   return syscall(SYS_getdents64, fd, buf, bufsiz);
 }
 
@@ -365,9 +337,7 @@ getdents(int fd, void *buf, size_t bufsiz)
 
    As a workaround, read /proc/<pid>/task/<tid>/status to find the signal
    mask so that we can decide which signal to try and send. */
-int
-signal_for_suspend(int pid, int tid)
-{
+int signal_for_suspend(int pid, int tid) {
   char pid_buffer[22];
   char tid_buffer[22];
 
@@ -376,11 +346,11 @@ signal_for_suspend(int pid, int tid)
 
   char status_file[6 + 22 + 6 + 22 + 7 + 1];
 
-  strcpy(status_file, "/proc/");    // 6
-  strcat(status_file, pid_buffer);  // 22
-  strcat(status_file, "/task/");    // 6
-  strcat(status_file, tid_buffer);  // 22
-  strcat(status_file, "/status");   // 7 + 1 for NUL
+  strcpy(status_file, "/proc/");   // 6
+  strcat(status_file, pid_buffer); // 22
+  strcat(status_file, "/task/");   // 6
+  strcat(status_file, tid_buffer); // 22
+  strcat(status_file, "/status");  // 7 + 1 for NUL
 
   int fd = open(status_file, O_RDONLY);
   if (fd < 0)
@@ -467,10 +437,7 @@ signal_for_suspend(int pid, int tid)
 }
 
 // Write a string to stderr
-void
-warn(const char *str) {
-  write(STDERR_FILENO, str, strlen(str));
-}
+void warn(const char *str) { write(STDERR_FILENO, str, strlen(str)); }
 
 /* Stop all other threads in this process; we do this by establishing a
    signal handler for SIGPROF, then iterating through the threads sending
@@ -482,9 +449,7 @@ warn(const char *str) {
    the getdents system call instead.
 
    The SIGPROF signals also serve to build the thread list. */
-void
-suspend_other_threads(struct thread *self)
-{
+void suspend_other_threads(struct thread *self) {
   struct sigaction sa, sa_old_prof, sa_old_usr1, sa_old_usr2;
 
   // Take the lock
@@ -506,7 +471,7 @@ suspend_other_threads(struct thread *self)
   /* Now scan /proc/self/task to get the tids of the threads in this
      process.  We need to ignore our own thread. */
   int fd = open("/proc/self/task",
-                O_RDONLY|O_NDELAY|O_DIRECTORY|O_LARGEFILE|O_CLOEXEC);
+                O_RDONLY | O_NDELAY | O_DIRECTORY | O_LARGEFILE | O_CLOEXEC);
   int our_pid = getpid();
   char buffer[4096];
   size_t offset = 0;
@@ -534,8 +499,7 @@ suspend_other_threads(struct thread *self)
       struct linux_dirent64 *dp = (struct linux_dirent64 *)&buffer[offset];
       offset += dp->d_reclen;
 
-      if (strcmp(dp->d_name, ".") == 0
-          || strcmp(dp->d_name, "..") == 0)
+      if (strcmp(dp->d_name, ".") == 0 || strcmp(dp->d_name, "..") == 0)
         continue;
 
       int tid = atoi(dp->d_name);
@@ -560,7 +524,7 @@ suspend_other_threads(struct thread *self)
       break;
 
     // Wait for the threads to suspend
-    struct timespec timeout = { 2, 0 };
+    struct timespec timeout = {2, 0};
     wait_paused(paused + pending, &timeout);
   } while (max_loops--);
 
@@ -573,9 +537,7 @@ suspend_other_threads(struct thread *self)
   sigaction(SIGUSR2, &sa_old_usr2, NULL);
 }
 
-void
-resume_other_threads()
-{
+void resume_other_threads() {
   // All we need to do here is release the lock.
   release_thread_lock();
 }
@@ -584,63 +546,47 @@ resume_other_threads()
 
 /* We use a futex to block the threads; we also use one to let us work out
    when all the threads we've asked to pause have actually paused. */
-int
-futex(uint32_t *uaddr, int futex_op, uint32_t val,
-      const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3)
-{
+int futex(uint32_t *uaddr, int futex_op, uint32_t val,
+          const struct timespec *timeout, uint32_t *uaddr2, uint32_t val3) {
   return syscall(SYS_futex, uaddr, futex_op, val, timeout, uaddr2, val3);
 }
 
 uint32_t thread_lock = 0;
 
-void
-take_thread_lock()
-{
+void take_thread_lock() {
   do {
     uint32_t zero = 0;
-    if (__atomic_compare_exchange_n(&thread_lock,
-                                    &zero,
-                                    1,
-                                    true,
-                                    __ATOMIC_ACQUIRE,
-                                    __ATOMIC_RELAXED))
+    if (__atomic_compare_exchange_n(&thread_lock, &zero, 1, true,
+                                    __ATOMIC_ACQUIRE, __ATOMIC_RELAXED))
       return;
-  } while (!futex(&thread_lock, FUTEX_WAIT, 1, NULL, NULL, 0)
-           || errno == EAGAIN);
+  } while (!futex(&thread_lock, FUTEX_WAIT, 1, NULL, NULL, 0) ||
+           errno == EAGAIN);
 }
 
-void
-release_thread_lock()
-{
+void release_thread_lock() {
   __atomic_store_n(&thread_lock, 0, __ATOMIC_RELEASE);
   futex(&thread_lock, FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
 uint32_t threads_paused = 0;
 
-void
-notify_paused()
-{
+void notify_paused() {
   __atomic_fetch_add(&threads_paused, 1, __ATOMIC_RELEASE);
   futex(&threads_paused, FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
-uint32_t
-currently_paused()
-{
+uint32_t currently_paused() {
   return __atomic_load_n(&threads_paused, __ATOMIC_ACQUIRE);
 }
 
-void
-wait_paused(uint32_t expected, const struct timespec *timeout)
-{
+void wait_paused(uint32_t expected, const struct timespec *timeout) {
   uint32_t current;
   do {
     current = __atomic_load_n(&threads_paused, __ATOMIC_ACQUIRE);
     if (current == expected)
       return;
-  } while (!futex(&threads_paused, FUTEX_WAIT, current, timeout, NULL, 0)
-           || errno == EAGAIN);
+  } while (!futex(&threads_paused, FUTEX_WAIT, current, timeout, NULL, 0) ||
+           errno == EAGAIN);
 }
 
 // .. Memory server ............................................................
@@ -658,9 +604,7 @@ int memserver_fd;
 sigjmp_buf memserver_fault_buf;
 pid_t memserver_pid;
 
-int
-memserver_start()
-{
+int memserver_start() {
   int ret;
   int fds[2];
 
@@ -675,12 +619,12 @@ memserver_start()
 #if MEMSERVER_USE_PROCESS
               0,
 #else
-              #ifndef __musl__
+#ifndef __musl__
               // Can't use CLONE_THREAD on musl because the clone() function
               // there returns EINVAL if we do.
               CLONE_THREAD | CLONE_SIGHAND |
-              #endif
-              CLONE_VM | CLONE_FILES | CLONE_FS | CLONE_IO,
+#endif
+                  CLONE_VM | CLONE_FILES | CLONE_FS | CLONE_IO,
 #endif
               NULL);
   if (ret < 0) {
@@ -703,14 +647,13 @@ memserver_start()
   return fds[1];
 }
 
-void
-memserver_fault(int sig) {
+void memserver_fault(int sig) {
   (void)sig;
   siglongjmp(memserver_fault_buf, -1);
 }
 
-ssize_t __attribute__((noinline))
-memserver_read(void *to, const void *from, size_t len) {
+ssize_t __attribute__((noinline)) memserver_read(void *to, const void *from,
+                                                 size_t len) {
   /* Earlier versions of this code tried to use process_vm_readv() if they
      detected that CAP_SYS_PTRACE was enabled.  This is theoretically
      slightly safer than using signals and memcpy(), but in practice it
@@ -726,8 +669,7 @@ memserver_read(void *to, const void *from, size_t len) {
   }
 }
 
-int
-memserver_entry(void *dummy __attribute__((unused))) {
+int memserver_entry(void *dummy __attribute__((unused))) {
   int fd = memserver_fd;
   int result = 1;
 
@@ -748,7 +690,8 @@ memserver_entry(void *dummy __attribute__((unused))) {
 
     ret = safe_read(fd, &req, sizeof(req));
     if (ret != sizeof(req)) {
-      memserver_error("memserver: terminating because safe_read() returned wrong size");
+      memserver_error(
+          "memserver: terminating because safe_read() returned wrong size");
       break;
     }
 
@@ -756,8 +699,8 @@ memserver_entry(void *dummy __attribute__((unused))) {
     uint64_t bytes = req.len;
 
     while (bytes) {
-      uint64_t todo = (bytes < sizeof(memserver_buffer)
-                       ? bytes : sizeof(memserver_buffer));
+      uint64_t todo =
+          (bytes < sizeof(memserver_buffer) ? bytes : sizeof(memserver_buffer));
 
       ret = memserver_read(memserver_buffer, (void *)addr, (size_t)todo);
 
@@ -777,7 +720,8 @@ memserver_entry(void *dummy __attribute__((unused))) {
 
       ret = safe_write(fd, memserver_buffer, resp.len);
       if (ret != resp.len) {
-        memserver_error("memserver: terminating because safe_write() failed (2)");
+        memserver_error(
+            "memserver: terminating because safe_write() failed (2)");
         goto fail;
       }
 
@@ -788,7 +732,7 @@ memserver_entry(void *dummy __attribute__((unused))) {
 
   result = 0;
 
- fail:
+fail:
   close(fd);
   return result;
 }
