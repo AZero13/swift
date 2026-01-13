@@ -706,7 +706,7 @@ public enum CompactImageMapFormat {
               abytes = EightByteBuffer(theCode)
 
               let codeBytes = Swift.max(
-                (64 - theCode.leadingZeroBitCount) >> 3, 1
+                (64 - theCode.leadingZeroBitCount + 7) >> 3, 1
               )
 
               state = .pathCode(8 - codeBytes)
